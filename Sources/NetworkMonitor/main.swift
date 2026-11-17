@@ -43,20 +43,20 @@ private struct MenuBarPanel: View {
             }
 
             HStack(spacing: 12) {
-                rateCard("下载", value: model.downloadRateText, symbol: "arrow.down", tint: .blue)
-                rateCard("上传", value: model.uploadRateText, symbol: "arrow.up", tint: .orange)
+                rateCard("应用下载", value: model.downloadRateText, symbol: "arrow.down", tint: .blue)
+                rateCard("应用上传", value: model.uploadRateText, symbol: "arrow.up", tint: .orange)
             }
 
             Divider()
             HStack {
-                Text("\(model.selectedPeriod.title)下载")
+                Text("\(model.selectedPeriod.title)应用下载")
                     .foregroundStyle(.secondary)
                 Spacer()
                 Text(ByteFormat.bytes(model.totalDownloaded))
                     .monospacedDigit()
             }
             HStack {
-                Text("\(model.selectedPeriod.title)上传")
+                Text("\(model.selectedPeriod.title)应用上传")
                     .foregroundStyle(.secondary)
                 Spacer()
                 Text(ByteFormat.bytes(model.totalUploaded))
