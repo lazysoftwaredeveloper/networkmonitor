@@ -41,4 +41,47 @@ final class UsageStoreTests: XCTestCase {
         XCTAssertEqual(store.totals(scope: .wired, period: .today).downloaded, 200)
         XCTAssertEqual(store.totals(scope: .all, period: .today).downloaded, 0)
     }
+    func testCustomDateRangeIncludesOnlySelectedDays() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        let formatter = ISO8601DateFormatter()
+        let firstDay = formatter.date(from: "2026-11-15T12:00:00Z")!
+        let secondDay = formatter.date(from: "2026-11-16T12:00:00Z")!
+        let outsideDay = formatter.date(from: "2026-11-17T10:00:00Z")!
+        let store = UsageStore(
+            fileURL: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString),
+            calendar: calendar
+        )
+
+        store.record([
+            AppUsageDelta(appKey: "safari", appName: "Safari", bundlePath: nil,
+                          downloaded: 100, uploaded: 10)
+        ], scope: .wifi, at: firstDay)
+        store.record([
+            AppUsageDelta(appKey: "safari", appName: "Safari", bundlePath: nil,
+                          downloaded: 200, uploaded: 20)
+        ], scope: .wifi, at: secondDay)
+        store.record([
+            AppUsageDelta(appKey: "safari", appName: "Safari", bundlePath: nil,
+                          downloaded: 400, uploaded: 40)
+        ], scope: .wifi, at: outsideDay)
+
+        let totals = store.totals(
+            scope: .wifi,
+            period: .custom,
+            now: outsideDay,
+            customStart: firstDay,
+            customEnd: secondDay
+        )
+        XCTAssertEqual(totals.downloaded, 300)
+        XCTAssertEqual(totals.uploaded, 30)
+        XCTAssertEqual(store.chart(
+            scope: .wifi,
+            period: .custom,
+            now: outsideDay,
+            customStart: firstDay,
+            customEnd: secondDay
+        ).count, 2)
+    }
+
 }
