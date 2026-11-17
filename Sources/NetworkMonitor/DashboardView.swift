@@ -64,7 +64,8 @@ public struct DashboardView: View {
     }
 
     private var filters: some View {
-        HStack(alignment: .center, spacing: 18) {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .center, spacing: 18) {
             VStack(alignment: .leading, spacing: 7) {
                 Text("网络类型")
                     .font(.caption)
@@ -90,7 +91,22 @@ public struct DashboardView: View {
                     }
                 }
                 .pickerStyle(.segmented)
-                .frame(width: 250)
+                .frame(width: 330)
+            }
+            if model.selectedPeriod == .custom {
+                HStack(spacing: 10) {
+                    Text("日期范围")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    DatePicker("开始日期", selection: $model.customStartDate,
+                               in: ...model.customEndDate, displayedComponents: .date)
+                        .labelsHidden()
+                    Text("至")
+                        .foregroundStyle(.secondary)
+                    DatePicker("结束日期", selection: $model.customEndDate,
+                               in: model.customStartDate..., displayedComponents: .date)
+                        .labelsHidden()
+                }
             }
         }
     }
