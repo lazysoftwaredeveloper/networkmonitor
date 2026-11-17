@@ -1,6 +1,6 @@
 import Foundation
 
-public enum NetworkScope: String, CaseIterable, Identifiable, Codable, Sendable {
+public enum NetworkScope: String, CaseIterable, Identifiable, Codable, Hashable, Sendable {
     case all
     case wifi
     case wired
@@ -38,7 +38,7 @@ public enum NetworkScope: String, CaseIterable, Identifiable, Codable, Sendable 
     }
 }
 
-public enum UsagePeriod: String, CaseIterable, Identifiable, Sendable {
+public enum UsagePeriod: String, CaseIterable, Identifiable, Hashable, Sendable {
     case today
     case week
     case month
