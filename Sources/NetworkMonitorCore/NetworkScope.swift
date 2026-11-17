@@ -65,13 +65,16 @@ public enum UsagePeriod: String, CaseIterable, Identifiable, Hashable, Sendable 
         case .month:
             return calendar.date(byAdding: .day, value: -29, to: today) ?? today
         case .custom:
-            return calendar.startOfDay(for: customStart ?? calendar.date(byAdding: .day, value: -6, to: today) ?? today)
+            let requested = calendar.startOfDay(for: customStart ?? calendar.date(byAdding: .day, value: -6, to: today) ?? today)
+            let oldestKept = calendar.date(byAdding: .day, value: -119, to: today) ?? today
+            return max(requested, oldestKept)
         }
     }
 
     func endExclusive(now: Date, calendar: Calendar = .current, customEnd: Date? = nil) -> Date {
         guard self == .custom else { return now.addingTimeInterval(1) }
-        let endDay = calendar.startOfDay(for: customEnd ?? now)
+        let requestedEnd = calendar.startOfDay(for: customEnd ?? now)
+        let endDay = min(requestedEnd, calendar.startOfDay(for: now))
         return calendar.date(byAdding: .day, value: 1, to: endDay) ?? endDay.addingTimeInterval(86_400)
     }
 
@@ -92,7 +95,8 @@ public enum UsagePeriod: String, CaseIterable, Identifiable, Hashable, Sendable 
             return (0..<30).compactMap { calendar.date(byAdding: .day, value: $0, to: first) }
         case .custom:
             let first = start(now: now, calendar: calendar, customStart: customStart)
-            let endDay = calendar.startOfDay(for: customEnd ?? now)
+            let requestedEnd = calendar.startOfDay(for: customEnd ?? now)
+            let endDay = min(requestedEnd, startOfToday)
             let days = max(1, (calendar.dateComponents([.day], from: first, to: endDay).day ?? 0) + 1)
             return (0..<min(days, 120)).compactMap { calendar.date(byAdding: .day, value: $0, to: first) }
         }
