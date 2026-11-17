@@ -76,6 +76,7 @@ final class UsageStoreTests: XCTestCase {
         let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         let file = folder.appendingPathComponent("usage.json")
         defer { try? FileManager.default.removeItem(at: folder) }
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
 
         let json = """
         {
