@@ -64,7 +64,7 @@ public struct DashboardView: View {
     }
 
     private var filters: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 14) {
             HStack(alignment: .center, spacing: 18) {
                 VStack(alignment: .leading, spacing: 7) {
                     Text("网络类型")
@@ -108,6 +108,52 @@ public struct DashboardView: View {
                     DatePicker("结束日期", selection: $model.customEndDate,
                                in: model.customStartDate...Date(), displayedComponents: .date)
                         .labelsHidden()
+                }
+            }
+
+            HStack(alignment: .center, spacing: 18) {
+                VStack(alignment: .leading, spacing: 7) {
+                    Text("具体网络")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Picker("具体网络", selection: $model.selectedNetworkID) {
+                        Text(model.selectedScope == .wifi ? "所有 Wi-Fi" : "所有网络")
+                            .tag(MonitorModel.allNetworksID)
+                        ForEach(model.availableNetworks) { network in
+                            Text("\(network.name) · \(ByteFormat.bytes(network.total))")
+                                .tag(network.id)
+                        }
+                    }
+                    .frame(maxWidth: 360)
+                }
+
+                Spacer(minLength: 8)
+
+                VStack(alignment: .trailing, spacing: 7) {
+                    Text("当前连接")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    HStack(spacing: 8) {
+                        Label(model.currentNetwork.name, systemImage: "wifi")
+                            .font(.system(size: 12, weight: .medium))
+                            .lineLimit(1)
+
+                        if model.canRequestWiFiNamePermission {
+                            Button("启用 Wi-Fi 名称") {
+                                model.requestWiFiNamePermission()
+                            }
+                            .controlSize(.small)
+                        } else if model.needsLocationSettings {
+                            Button("定位权限设置") {
+                                model.openLocationSettings()
+                            }
+                            .controlSize(.small)
+                        } else {
+                            Text("名称读取已授权")
+                                .font(.system(size: 11))
+                                .foregroundStyle(.secondary)
+                        }
+                    }
                 }
             }
         }
@@ -229,7 +275,7 @@ public struct DashboardView: View {
     private var footnote: some View {
         HStack(alignment: .top, spacing: 8) {
             Image(systemName: "info.circle")
-            Text("应用用量来自 macOS nettop 的进程统计。短连接及部分系统活动可能无法完全归因；“计费网络”依据 macOS 的 expensive 网络标记。历史数据从本应用开始记录时起算。")
+            Text("应用用量来自 macOS nettop 的进程统计。短连接及部分系统活动可能无法完全归因；网络身份优先使用本机解析到的网关硬件地址。读取 Wi-Fi 名称需要你主动授予定位服务权限，但应用不会请求或保存 GPS 位置。历史数据从本应用开始记录时起算。")
         }
         .font(.system(size: 11))
         .foregroundStyle(.secondary)
