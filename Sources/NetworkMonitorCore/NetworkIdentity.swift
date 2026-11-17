@@ -72,14 +72,13 @@ public final class WiFiNameProvider: NSObject, CLLocationManagerDelegate {
 
     public func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
         refreshPermission()
-        onChange?()
     }
 
     private func refreshPermission() {
         let status = manager.authorizationStatus
         let next: WiFiNamePermission
         switch status {
-        case .authorizedAlways, .authorizedWhenInUse:
+        case .authorizedAlways:
             next = .authorized
         case .notDetermined:
             next = .notDetermined
