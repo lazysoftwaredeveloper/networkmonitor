@@ -49,7 +49,7 @@ public struct DashboardView: View {
 
             HStack(spacing: 7) {
                 Circle()
-                    .fill(model.statusText.contains("失败") || model.statusText.contains("退出") ? Color.orange : Color.green)
+                    .fill(model.statusText.contains("失败") || model.statusText.contains("无法") || model.statusText.contains("退出") || model.statusText.contains("重试") ? Color.orange : Color.green)
                     .frame(width: 7, height: 7)
                 Text(model.statusText)
                     .font(.system(size: 12))
