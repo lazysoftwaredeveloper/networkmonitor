@@ -10,6 +10,12 @@ public final class MonitorModel: ObservableObject {
     @Published public var selectedPeriod: UsagePeriod = .week {
         didSet { refresh() }
     }
+    @Published public var customStartDate: Date = Calendar.current.date(byAdding: .day, value: -6, to: Date()) ?? Date() {
+        didSet { refresh() }
+    }
+    @Published public var customEndDate: Date = Date() {
+        didSet { refresh() }
+    }
 
     @Published public private(set) var totalDownloaded: Int64 = 0
     @Published public private(set) var totalUploaded: Int64 = 0
@@ -113,11 +119,11 @@ public final class MonitorModel: ObservableObject {
 
     private func refresh() {
         let now = Date()
-        let totals = store.totals(scope: selectedScope, period: selectedPeriod, now: now)
+        let totals = store.totals(scope: selectedScope, period: selectedPeriod, now: now, customStart: customStartDate, customEnd: customEndDate)
         totalDownloaded = totals.downloaded
         totalUploaded = totals.uploaded
-        appSummaries = store.apps(scope: selectedScope, period: selectedPeriod, now: now)
-        chartPoints = store.chart(scope: selectedScope, period: selectedPeriod, now: now)
+        appSummaries = store.apps(scope: selectedScope, period: selectedPeriod, now: now, customStart: customStartDate, customEnd: customEndDate)
+        chartPoints = store.chart(scope: selectedScope, period: selectedPeriod, now: now, customStart: customStartDate, customEnd: customEndDate)
         let rate = rates[selectedScope] ?? (0, 0)
         downloadRate = rate.download
         uploadRate = rate.upload
