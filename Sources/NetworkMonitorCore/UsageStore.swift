@@ -104,22 +104,26 @@ public final class UsageStore {
         pruneIfNeeded(now: date)
     }
 
-    public func totals(scope: NetworkScope, period: UsagePeriod, now: Date = Date()) -> UsageTotals {
-        let start = period.start(now: now, calendar: calendar)
+    public func totals(scope: NetworkScope, period: UsagePeriod, now: Date = Date(),
+                       customStart: Date? = nil, customEnd: Date? = nil) -> UsageTotals {
+        let start = period.start(now: now, calendar: calendar, customStart: customStart)
+        let end = period.endExclusive(now: now, calendar: calendar, customEnd: customEnd)
         var downloaded: Int64 = 0
         var uploaded: Int64 = 0
-        for record in records.values where record.scope == scope && record.bucketStart >= start && record.bucketStart <= now {
+        for record in records.values where record.scope == scope && record.bucketStart >= start && record.bucketStart < end {
             downloaded += record.downloaded
             uploaded += record.uploaded
         }
         return UsageTotals(downloaded: downloaded, uploaded: uploaded)
     }
 
-    public func apps(scope: NetworkScope, period: UsagePeriod, now: Date = Date()) -> [AppUsageSummary] {
-        let start = period.start(now: now, calendar: calendar)
+    public func apps(scope: NetworkScope, period: UsagePeriod, now: Date = Date(),
+                     customStart: Date? = nil, customEnd: Date? = nil) -> [AppUsageSummary] {
+        let start = period.start(now: now, calendar: calendar, customStart: customStart)
+        let end = period.endExclusive(now: now, calendar: calendar, customEnd: customEnd)
         var grouped: [String: AppUsageSummary] = [:]
 
-        for record in records.values where record.scope == scope && record.bucketStart >= start && record.bucketStart <= now {
+        for record in records.values where record.scope == scope && record.bucketStart >= start && record.bucketStart < end {
             if var current = grouped[record.appKey] {
                 current.downloaded += record.downloaded
                 current.uploaded += record.uploaded
@@ -143,11 +147,13 @@ public final class UsageStore {
         }
     }
 
-    public func chart(scope: NetworkScope, period: UsagePeriod, now: Date = Date()) -> [UsageChartPoint] {
-        let start = period.start(now: now, calendar: calendar)
+    public func chart(scope: NetworkScope, period: UsagePeriod, now: Date = Date(),
+                      customStart: Date? = nil, customEnd: Date? = nil) -> [UsageChartPoint] {
+        let start = period.start(now: now, calendar: calendar, customStart: customStart)
+        let end = period.endExclusive(now: now, calendar: calendar, customEnd: customEnd)
         var buckets: [Date: (downloaded: Int64, uploaded: Int64)] = [:]
 
-        for record in records.values where record.scope == scope && record.bucketStart >= start && record.bucketStart <= now {
+        for record in records.values where record.scope == scope && record.bucketStart >= start && record.bucketStart < end {
             let bucket = period == .today
                 ? (calendar.dateInterval(of: .hour, for: record.bucketStart)?.start ?? record.bucketStart)
                 : calendar.startOfDay(for: record.bucketStart)
@@ -157,7 +163,7 @@ public final class UsageStore {
             buckets[bucket] = totals
         }
 
-        return period.bucketStarts(now: now, calendar: calendar).map { date in
+        return period.bucketStarts(now: now, calendar: calendar, customStart: customStart, customEnd: customEnd).map { date in
             let value = buckets[date] ?? (0, 0)
             return UsageChartPoint(date: date, downloaded: value.downloaded, uploaded: value.uploaded)
         }
