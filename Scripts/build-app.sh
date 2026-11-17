@@ -37,6 +37,12 @@ cat > "$CONTENTS/Info.plist" <<'PLIST'
     <true/>
     <key>LSApplicationCategoryType</key>
     <string>public.app-category.utilities</string>
+    <key>NSLocationUsageDescription</key>
+    <string>仅在你主动开启后读取当前 Wi-Fi 名称，用于按网络分别统计流量；不会获取或保存 GPS 位置。</string>
+    <key>NSLocationWhenInUseUsageDescription</key>
+    <string>仅在你主动开启后读取当前 Wi-Fi 名称，用于按网络分别统计流量；不会获取或保存 GPS 位置。</string>
+    <key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+    <string>仅在你主动开启后读取当前 Wi-Fi 名称，用于按网络分别统计流量；不会获取或保存 GPS 位置。</string>
 </dict>
 </plist>
 PLIST

@@ -39,6 +39,15 @@ public struct UsageChartPoint: Identifiable, Equatable, Sendable {
     public var id: Date { date }
 }
 
+/// Traffic attributed to one physical network during the selected period.
+public struct NetworkUsageSummary: Identifiable, Equatable, Sendable {
+    public let id: String
+    public var name: String
+    public var downloaded: Int64
+    public var uploaded: Int64
+    public var total: Int64 { downloaded + uploaded }
+}
+
 private struct UsageRecord: Codable {
     let id: String
     let bucketStart: Date
@@ -48,6 +57,10 @@ private struct UsageRecord: Codable {
     var bundlePath: String?
     var downloaded: Int64
     var uploaded: Int64
+    /// Optional for backwards compatibility with records written before
+    /// per-network attribution was added.
+    var networkID: String?
+    var networkName: String?
 }
 
 private struct UsageArchive: Codable {
@@ -57,6 +70,7 @@ private struct UsageArchive: Codable {
 /// Hourly local history. The file is deliberately plain JSON so users can
 /// inspect, back up, or delete their own traffic history without a database tool.
 public final class UsageStore {
+    private static let legacyNetworkID = "legacy"
     private var records: [String: UsageRecord] = [:]
     private let fileURL: URL
     private let calendar: Calendar
@@ -76,17 +90,21 @@ public final class UsageStore {
         pruneIfNeeded(now: Date())
     }
 
-    public func record(_ deltas: [AppUsageDelta], scope: NetworkScope, at date: Date = Date()) {
+    public func record(_ deltas: [AppUsageDelta],
+                       scope: NetworkScope,
+                       network: NetworkIdentity = .unknown,
+                       at date: Date = Date()) {
         guard !deltas.isEmpty else { return }
         let hour = calendar.dateInterval(of: .hour, for: date)?.start ?? date
 
         for delta in deltas where delta.downloaded > 0 || delta.uploaded > 0 {
-            let key = "\(Int64(hour.timeIntervalSince1970))|\(scope.rawValue)|\(delta.appKey)"
+            let key = "\(Int64(hour.timeIntervalSince1970))|\(scope.rawValue)|\(network.id)|\(delta.appKey)"
             if var existing = records[key] {
                 existing.downloaded += delta.downloaded
                 existing.uploaded += delta.uploaded
                 existing.appName = delta.appName
                 existing.bundlePath = delta.bundlePath ?? existing.bundlePath
+                existing.networkName = network.name
                 records[key] = existing
             } else {
                 records[key] = UsageRecord(
@@ -97,33 +115,84 @@ public final class UsageStore {
                     appName: delta.appName,
                     bundlePath: delta.bundlePath,
                     downloaded: delta.downloaded,
-                    uploaded: delta.uploaded
+                    uploaded: delta.uploaded,
+                    networkID: network.id,
+                    networkName: network.name
                 )
             }
         }
         pruneIfNeeded(now: date)
     }
 
-    public func totals(scope: NetworkScope, period: UsagePeriod, now: Date = Date(),
-                       customStart: Date? = nil, customEnd: Date? = nil) -> UsageTotals {
+    /// Networks with recorded traffic in the selected period, biggest first.
+    /// Older records without a network ID remain visible as one legacy group.
+    public func networks(scope: NetworkScope,
+                         period: UsagePeriod,
+                         now: Date = Date(),
+                         customStart: Date? = nil,
+                         customEnd: Date? = nil) -> [NetworkUsageSummary] {
+        let start = period.start(now: now, calendar: calendar, customStart: customStart)
+        let end = period.endExclusive(now: now, calendar: calendar, customEnd: customEnd)
+        var grouped: [String: NetworkUsageSummary] = [:]
+
+        let matching = records.values
+            .filter { matches($0, scope: scope, networkID: nil, start: start, end: end) }
+            .sorted { $0.bucketStart < $1.bucketStart }
+
+        for record in matching {
+            let id = record.networkID ?? Self.legacyNetworkID
+            let name = record.networkName ?? "旧记录（未按网络区分）"
+            if var current = grouped[id] {
+                current.downloaded += record.downloaded
+                current.uploaded += record.uploaded
+                if record.networkName != nil { current.name = name }
+                grouped[id] = current
+            } else {
+                grouped[id] = NetworkUsageSummary(
+                    id: id,
+                    name: name,
+                    downloaded: record.downloaded,
+                    uploaded: record.uploaded
+                )
+            }
+        }
+
+        return grouped.values.sorted {
+            if $0.total == $1.total {
+                return $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
+            }
+            return $0.total > $1.total
+        }
+    }
+
+    public func totals(scope: NetworkScope,
+                       period: UsagePeriod,
+                       networkID: String? = nil,
+                       now: Date = Date(),
+                       customStart: Date? = nil,
+                       customEnd: Date? = nil) -> UsageTotals {
         let start = period.start(now: now, calendar: calendar, customStart: customStart)
         let end = period.endExclusive(now: now, calendar: calendar, customEnd: customEnd)
         var downloaded: Int64 = 0
         var uploaded: Int64 = 0
-        for record in records.values where record.scope == scope && record.bucketStart >= start && record.bucketStart < end {
+        for record in records.values where matches(record, scope: scope, networkID: networkID, start: start, end: end) {
             downloaded += record.downloaded
             uploaded += record.uploaded
         }
         return UsageTotals(downloaded: downloaded, uploaded: uploaded)
     }
 
-    public func apps(scope: NetworkScope, period: UsagePeriod, now: Date = Date(),
-                     customStart: Date? = nil, customEnd: Date? = nil) -> [AppUsageSummary] {
+    public func apps(scope: NetworkScope,
+                     period: UsagePeriod,
+                     networkID: String? = nil,
+                     now: Date = Date(),
+                     customStart: Date? = nil,
+                     customEnd: Date? = nil) -> [AppUsageSummary] {
         let start = period.start(now: now, calendar: calendar, customStart: customStart)
         let end = period.endExclusive(now: now, calendar: calendar, customEnd: customEnd)
         var grouped: [String: AppUsageSummary] = [:]
 
-        for record in records.values where record.scope == scope && record.bucketStart >= start && record.bucketStart < end {
+        for record in records.values where matches(record, scope: scope, networkID: networkID, start: start, end: end) {
             if var current = grouped[record.appKey] {
                 current.downloaded += record.downloaded
                 current.uploaded += record.uploaded
@@ -142,18 +211,24 @@ public final class UsageStore {
         }
 
         return grouped.values.sorted {
-            if $0.total == $1.total { return $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+            if $0.total == $1.total {
+                return $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
+            }
             return $0.total > $1.total
         }
     }
 
-    public func chart(scope: NetworkScope, period: UsagePeriod, now: Date = Date(),
-                      customStart: Date? = nil, customEnd: Date? = nil) -> [UsageChartPoint] {
+    public func chart(scope: NetworkScope,
+                      period: UsagePeriod,
+                      networkID: String? = nil,
+                      now: Date = Date(),
+                      customStart: Date? = nil,
+                      customEnd: Date? = nil) -> [UsageChartPoint] {
         let start = period.start(now: now, calendar: calendar, customStart: customStart)
         let end = period.endExclusive(now: now, calendar: calendar, customEnd: customEnd)
         var buckets: [Date: (downloaded: Int64, uploaded: Int64)] = [:]
 
-        for record in records.values where record.scope == scope && record.bucketStart >= start && record.bucketStart < end {
+        for record in records.values where matches(record, scope: scope, networkID: networkID, start: start, end: end) {
             let bucket = period == .today
                 ? (calendar.dateInterval(of: .hour, for: record.bucketStart)?.start ?? record.bucketStart)
                 : calendar.startOfDay(for: record.bucketStart)
@@ -182,6 +257,22 @@ public final class UsageStore {
         } catch {
             NSLog("NetworkMonitor: could not save usage history: %@", error.localizedDescription)
         }
+    }
+
+    private func matches(_ record: UsageRecord,
+                         scope: NetworkScope,
+                         networkID: String?,
+                         start: Date,
+                         end: Date) -> Bool {
+        guard record.scope == scope,
+              record.bucketStart >= start,
+              record.bucketStart < end else { return false }
+
+        guard let networkID else { return true }
+        if networkID == Self.legacyNetworkID {
+            return record.networkID == nil
+        }
+        return record.networkID == networkID
     }
 
     private func pruneIfNeeded(now: Date) {
