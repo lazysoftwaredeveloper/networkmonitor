@@ -5,7 +5,10 @@ import Foundation
 @MainActor
 public final class MonitorModel: ObservableObject {
     @Published public var selectedScope: NetworkScope = .all {
-        didSet { refresh() }
+        didSet {
+            statusText = streamStatuses[selectedScope] ?? "正在记录 · 数据仅保存在本机"
+            refresh()
+        }
     }
     @Published public var selectedPeriod: UsagePeriod = .week {
         didSet { refresh() }
@@ -28,6 +31,7 @@ public final class MonitorModel: ObservableObject {
     private let store = UsageStore()
     private let identityResolver = ProcessIdentityResolver()
     private var streams: [NettopStream] = []
+    private var streamStatuses: [NetworkScope: String] = [:]
     private var lastSampleAt: [NetworkScope: Date] = [:]
     private var rates: [NetworkScope: (download: Double, upload: Double)] = [:]
     private var saveTimer: Timer?
@@ -74,9 +78,12 @@ public final class MonitorModel: ObservableObject {
                 }
             }
             stream.onStatus = { [weak self] message in
-                guard scope == .all else { return }
                 Task { @MainActor [weak self] in
-                    self?.statusText = message
+                    guard let self else { return }
+                    self.streamStatuses[scope] = message
+                    if self.selectedScope == scope {
+                        self.statusText = message
+                    }
                 }
             }
             streams.append(stream)
