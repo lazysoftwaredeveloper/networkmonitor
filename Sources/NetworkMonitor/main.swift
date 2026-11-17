@@ -49,14 +49,14 @@ private struct MenuBarPanel: View {
 
             Divider()
             HStack {
-                Text("今日下载")
+                Text("\(model.selectedPeriod.title)下载")
                     .foregroundStyle(.secondary)
                 Spacer()
                 Text(ByteFormat.bytes(model.totalDownloaded))
                     .monospacedDigit()
             }
             HStack {
-                Text("今日上传")
+                Text("\(model.selectedPeriod.title)上传")
                     .foregroundStyle(.secondary)
                 Spacer()
                 Text(ByteFormat.bytes(model.totalUploaded))
