@@ -91,7 +91,9 @@ public final class MonitorModel: ObservableObject {
         }
 
         saveTimer = Timer.scheduledTimer(withTimeInterval: 10, repeats: true) { [weak self] _ in
-            self?.store.save()
+            Task { @MainActor [weak self] in
+                self?.store.save()
+            }
         }
         statusText = "正在记录 · 数据仅保存在本机"
     }
