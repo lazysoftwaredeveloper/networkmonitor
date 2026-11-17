@@ -180,11 +180,17 @@ public struct DashboardView: View {
             }
 
             if model.appSummaries.isEmpty {
-                ContentUnavailableView(
-                    "暂时没有流量记录",
-                    systemImage: "chart.bar.xaxis",
-                    description: Text("产生网络活动后，这里会显示各应用的下载和上传用量。")
-                )
+                VStack(spacing: 10) {
+                    Image(systemName: "chart.bar.xaxis")
+                        .font(.system(size: 28))
+                        .foregroundStyle(.tertiary)
+                    Text("暂时没有流量记录")
+                        .font(.system(size: 14, weight: .medium))
+                    Text("产生网络活动后，这里会显示各应用的下载和上传用量。")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity)
                 .frame(height: 170)
             } else {
                 VStack(spacing: 0) {
