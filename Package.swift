@@ -12,7 +12,11 @@ let package = Package(
             name: "NetworkMonitorCore",
             path: "Sources/NetworkMonitorCore",
             linkerSettings: [
-                .linkedFramework("AppKit")
+                .linkedFramework("AppKit"),
+                .linkedFramework("CoreLocation"),
+                .linkedFramework("CoreWLAN"),
+                .linkedFramework("Network"),
+                .linkedFramework("SystemConfiguration")
             ]
         ),
         .executableTarget(
