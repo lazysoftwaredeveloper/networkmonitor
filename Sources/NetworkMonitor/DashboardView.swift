@@ -66,33 +66,35 @@ public struct DashboardView: View {
     private var filters: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .center, spacing: 18) {
-            VStack(alignment: .leading, spacing: 7) {
-                Text("网络类型")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                Picker("网络类型", selection: $model.selectedScope) {
-                    ForEach(NetworkScope.allCases) { scope in
-                        Label(scope.title, systemImage: scope.symbol).tag(scope)
+                VStack(alignment: .leading, spacing: 7) {
+                    Text("网络类型")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Picker("网络类型", selection: $model.selectedScope) {
+                        ForEach(NetworkScope.allCases) { scope in
+                            Label(scope.title, systemImage: scope.symbol).tag(scope)
+                        }
                     }
+                    .pickerStyle(.segmented)
+                    .frame(maxWidth: 470)
                 }
-                .pickerStyle(.segmented)
-                .frame(maxWidth: 470)
+
+                Spacer(minLength: 10)
+
+                VStack(alignment: .leading, spacing: 7) {
+                    Text("统计周期")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Picker("统计周期", selection: $model.selectedPeriod) {
+                        ForEach(UsagePeriod.allCases) { period in
+                            Text(period.title).tag(period)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                    .frame(width: 330)
+                }
             }
 
-            Spacer(minLength: 10)
-
-            VStack(alignment: .leading, spacing: 7) {
-                Text("统计周期")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                Picker("统计周期", selection: $model.selectedPeriod) {
-                    ForEach(UsagePeriod.allCases) { period in
-                        Text(period.title).tag(period)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .frame(width: 330)
-            }
             if model.selectedPeriod == .custom {
                 HStack(spacing: 10) {
                     Text("日期范围")
@@ -104,7 +106,7 @@ public struct DashboardView: View {
                     Text("至")
                         .foregroundStyle(.secondary)
                     DatePicker("结束日期", selection: $model.customEndDate,
-                               in: model.customStartDate..., displayedComponents: .date)
+                               in: model.customStartDate...Date(), displayedComponents: .date)
                         .labelsHidden()
                 }
             }
