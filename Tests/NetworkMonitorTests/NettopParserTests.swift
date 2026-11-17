@@ -48,10 +48,10 @@ final class NettopParserTests: XCTestCase {
 
     func testEmitsEmptySamplesAfterInitialBaseline() {
         var parser = NettopParser()
-        _ = parser.consume("time,,bytes_in,bytes_out,\\n01:00:00,Safari.10,100,200,\\n")
+        _ = parser.consume("time,,bytes_in,bytes_out,\n01:00:00,Safari.10,100,200,\n")
         XCTAssertNil(parser.flush())
 
-        let emptySample = parser.consume("time,,bytes_in,bytes_out,\\n")
+        let emptySample = parser.consume("time,,bytes_in,bytes_out,\n")
         XCTAssertEqual(emptySample.count, 1)
         XCTAssertTrue(emptySample[0].isEmpty)
     }
