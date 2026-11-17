@@ -6,7 +6,7 @@ A small native macOS app focused only on network traffic statistics.
 
 - Live download and upload rates in the app and menu bar.
 - Per-application download/upload totals.
-- Today, last 7 days, and last 30 days.
+- Today, last 7 days, last 30 days, and a custom date range.
 - Network-type filters: all external traffic, Wi-Fi, wired, and macOS-marked expensive interfaces.
 - Local hourly history stored in Application Support. No account, cloud service, or analytics.
 
