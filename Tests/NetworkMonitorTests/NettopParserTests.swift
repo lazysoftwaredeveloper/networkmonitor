@@ -39,4 +39,21 @@ final class NettopParserTests: XCTestCase {
         XCTAssertNil(NettopParser.parseRow("01:00:00,header,bytes_in,bytes_out,"))
         XCTAssertNil(NettopParser.parseRow("01:00:00,listener,,"))
     }
+    func testParsesIdleProcessWithEmptyCounters() {
+        let row = NettopParser.parseRow("02:21:32.760799,airportd.494,,,")
+        XCTAssertEqual(row?.pid, 494)
+        XCTAssertEqual(row?.bytesIn, 0)
+        XCTAssertEqual(row?.bytesOut, 0)
+    }
+
+    func testEmitsEmptySamplesAfterInitialBaseline() {
+        var parser = NettopParser()
+        _ = parser.consume("time,,bytes_in,bytes_out,\\n01:00:00,Safari.10,100,200,\\n")
+        XCTAssertNil(parser.flush())
+
+        let emptySample = parser.consume("time,,bytes_in,bytes_out,\\n")
+        XCTAssertEqual(emptySample.count, 1)
+        XCTAssertTrue(emptySample[0].isEmpty)
+    }
+
 }
