@@ -115,13 +115,13 @@ public struct DashboardView: View {
 
     private var metrics: some View {
         LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
-            MetricCard(title: "累计下载", value: ByteFormat.bytes(model.totalDownloaded),
+            MetricCard(title: "应用下载", value: ByteFormat.bytes(model.totalDownloaded),
                        detail: model.selectedPeriod.title, symbol: "arrow.down.circle.fill", tint: .blue)
-            MetricCard(title: "累计上传", value: ByteFormat.bytes(model.totalUploaded),
+            MetricCard(title: "应用上传", value: ByteFormat.bytes(model.totalUploaded),
                        detail: model.selectedPeriod.title, symbol: "arrow.up.circle.fill", tint: .orange)
-            MetricCard(title: "实时下载", value: model.downloadRateText,
+            MetricCard(title: "实时应用下载", value: model.downloadRateText,
                        detail: "当前速度", symbol: "arrow.down.to.line", tint: .blue)
-            MetricCard(title: "实时上传", value: model.uploadRateText,
+            MetricCard(title: "实时应用上传", value: model.uploadRateText,
                        detail: "当前速度", symbol: "arrow.up.to.line", tint: .orange)
         }
     }
@@ -130,9 +130,9 @@ public struct DashboardView: View {
         VStack(alignment: .leading, spacing: 16) {
             HStack {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("流量趋势")
+                    Text("应用流量趋势")
                         .font(.system(size: 16, weight: .semibold))
-                    Text("下载与上传")
+                    Text("按应用进程归因的下载与上传")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
