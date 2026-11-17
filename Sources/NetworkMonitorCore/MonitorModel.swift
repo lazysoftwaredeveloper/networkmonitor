@@ -4,6 +4,8 @@ import Foundation
 
 @MainActor
 public final class MonitorModel: ObservableObject {
+    public static let allNetworksID = "__all_networks__"
+
     @Published public var selectedScope: NetworkScope = .all {
         didSet {
             statusText = streamStatuses[selectedScope] ?? "正在记录 · 数据仅保存在本机"
@@ -11,6 +13,9 @@ public final class MonitorModel: ObservableObject {
         }
     }
     @Published public var selectedPeriod: UsagePeriod = .week {
+        didSet { refresh() }
+    }
+    @Published public var selectedNetworkID: String = MonitorModel.allNetworksID {
         didSet { refresh() }
     }
     @Published public var customStartDate: Date = Calendar.current.date(byAdding: .day, value: -6, to: Date()) ?? Date() {
@@ -26,10 +31,15 @@ public final class MonitorModel: ObservableObject {
     @Published public private(set) var uploadRate: Double = 0
     @Published public private(set) var appSummaries: [AppUsageSummary] = []
     @Published public private(set) var chartPoints: [UsageChartPoint] = []
+    @Published public private(set) var availableNetworks: [NetworkUsageSummary] = []
+    @Published public private(set) var currentNetwork: NetworkIdentity = .unknown
+    @Published public private(set) var wifiNamePermission: WiFiNamePermission = .notDetermined
     @Published public private(set) var statusText = "正在启动监控…"
 
     private let store = UsageStore()
     private let identityResolver = ProcessIdentityResolver()
+    private let wifiNames: WiFiNameProvider
+    private let networkIdentityMonitor: NetworkIdentityMonitor
     private var streams: [NettopStream] = []
     private var streamStatuses: [NetworkScope: String] = [:]
     private var lastSampleAt: [NetworkScope: Date] = [:]
@@ -38,7 +48,28 @@ public final class MonitorModel: ObservableObject {
     private var terminationObserver: NSObjectProtocol?
 
     public init() {
+        let wifiNames = WiFiNameProvider()
+        self.wifiNames = wifiNames
+        self.networkIdentityMonitor = NetworkIdentityMonitor(wifiNames: wifiNames)
+
         store.load()
+        wifiNamePermission = wifiNames.permission
+
+        wifiNames.onChange = { [weak self] in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                self.wifiNamePermission = wifiNames.permission
+                self.networkIdentityMonitor.refresh()
+            }
+        }
+        networkIdentityMonitor.onChange = { [weak self] identity in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                self.currentNetwork = identity
+                self.refresh()
+            }
+        }
+
         refresh()
         startMonitoring()
         terminationObserver = NotificationCenter.default.addObserver(
@@ -60,9 +91,30 @@ public final class MonitorModel: ObservableObject {
     public var uploadRateText: String { ByteFormat.rate(uploadRate) }
     public var maxAppTotal: Int64 { max(appSummaries.map(\.total).max() ?? 0, 1) }
 
+    public var canRequestWiFiNamePermission: Bool {
+        wifiNamePermission == .notDetermined
+    }
+
+    public var needsLocationSettings: Bool {
+        wifiNamePermission == .denied
+    }
+
+    public func requestWiFiNamePermission() {
+        wifiNames.requestPermission()
+        wifiNamePermission = wifiNames.permission
+    }
+
+    public func openLocationSettings() {
+        guard let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_LocationServices") else {
+            return
+        }
+        NSWorkspace.shared.open(url)
+    }
+
     public func stopMonitoring() {
         saveTimer?.invalidate()
         saveTimer = nil
+        networkIdentityMonitor.stop()
         streams.forEach { $0.stop() }
         streams.removeAll()
         store.save()
@@ -70,6 +122,8 @@ public final class MonitorModel: ObservableObject {
     }
 
     private func startMonitoring() {
+        networkIdentityMonitor.start()
+
         for scope in NetworkScope.allCases {
             let stream = NettopStream(scope: scope)
             stream.onSample = { [weak self] rows in
@@ -119,7 +173,7 @@ public final class MonitorModel: ObservableObject {
         let downloaded = deltas.reduce(Int64(0)) { $0 + $1.downloaded }
         let uploaded = deltas.reduce(Int64(0)) { $0 + $1.uploaded }
         rates[scope] = (Double(downloaded) / elapsed, Double(uploaded) / elapsed)
-        store.record(deltas, scope: scope, at: now)
+        store.record(deltas, scope: scope, network: networkIdentityMonitor.currentIdentity, at: now)
 
         if selectedScope == scope {
             refresh()
@@ -128,11 +182,40 @@ public final class MonitorModel: ObservableObject {
 
     private func refresh() {
         let now = Date()
-        let totals = store.totals(scope: selectedScope, period: selectedPeriod, now: now, customStart: customStartDate, customEnd: customEndDate)
+        let networkID = selectedNetworkID == Self.allNetworksID ? nil : selectedNetworkID
+        availableNetworks = store.networks(
+            scope: selectedScope,
+            period: selectedPeriod,
+            now: now,
+            customStart: customStartDate,
+            customEnd: customEndDate
+        )
+        let totals = store.totals(
+            scope: selectedScope,
+            period: selectedPeriod,
+            networkID: networkID,
+            now: now,
+            customStart: customStartDate,
+            customEnd: customEndDate
+        )
         totalDownloaded = totals.downloaded
         totalUploaded = totals.uploaded
-        appSummaries = store.apps(scope: selectedScope, period: selectedPeriod, now: now, customStart: customStartDate, customEnd: customEndDate)
-        chartPoints = store.chart(scope: selectedScope, period: selectedPeriod, now: now, customStart: customStartDate, customEnd: customEndDate)
+        appSummaries = store.apps(
+            scope: selectedScope,
+            period: selectedPeriod,
+            networkID: networkID,
+            now: now,
+            customStart: customStartDate,
+            customEnd: customEndDate
+        )
+        chartPoints = store.chart(
+            scope: selectedScope,
+            period: selectedPeriod,
+            networkID: networkID,
+            now: now,
+            customStart: customStartDate,
+            customEnd: customEndDate
+        )
         let rate = rates[selectedScope] ?? (0, 0)
         downloadRate = rate.download
         uploadRate = rate.upload
