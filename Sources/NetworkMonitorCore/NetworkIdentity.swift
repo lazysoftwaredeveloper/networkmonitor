@@ -106,6 +106,7 @@ public final class NetworkIdentityMonitor {
 
     private var lastPath: NWPath?
     private var debounce: DispatchWorkItem?
+    private var serviceStore: SCDynamicStore?
     private var storedIdentity = NetworkIdentity.unknown
 
     public var onChange: ((NetworkIdentity) -> Void)?
@@ -127,10 +128,15 @@ public final class NetworkIdentityMonitor {
             self.scheduleEvaluation(path)
         }
         pathMonitor.start(queue: queue)
+        watchServices()
     }
 
     public func stop() {
         debounce?.cancel()
+        if let serviceStore {
+            SCDynamicStoreSetDispatchQueue(serviceStore, nil)
+        }
+        serviceStore = nil
         pathMonitor.cancel()
     }
 
@@ -149,18 +155,51 @@ public final class NetworkIdentityMonitor {
         queue.asyncAfter(deadline: .now() + 1, execute: work)
     }
 
+    /// A DHCP lease or gateway can change without NWPathMonitor reporting a
+    /// different path, so also watch configd's IPv4/DHCP service state.
+    private func watchServices() {
+        var context = SCDynamicStoreContext(
+            version: 0,
+            info: Unmanaged.passUnretained(self).toOpaque(),
+            retain: nil,
+            release: nil,
+            copyDescription: nil
+        )
+        guard let store = SCDynamicStoreCreate(nil, "NetworkMonitor" as CFString, { _, _, info in
+            guard let info else { return }
+            Unmanaged<NetworkIdentityMonitor>.fromOpaque(info).takeUnretainedValue().servicesChanged()
+        }, &context) else { return }
+
+        SCDynamicStoreSetNotificationKeys(
+            store,
+            nil,
+            ["State:/Network/Service/[^/]+/(IPv4|DHCP)"] as CFArray
+        )
+        SCDynamicStoreSetDispatchQueue(store, queue)
+        serviceStore = store
+    }
+
+    /// Called on the monitor's serial queue.
+    private func servicesChanged() {
+        guard let lastPath else { return }
+        scheduleEvaluation(lastPath)
+    }
+
     private func evaluate(_ path: NWPath) {
         guard path.status == .satisfied else {
             publish(.offline)
             return
         }
 
-        let interface = path.availableInterfaces.first {
+        let route = GatewayProbe.defaultRoute()
+        let interface = route.interfaceName.flatMap { routeName in
+            path.availableInterfaces.first { $0.name == routeName }
+        } ?? path.availableInterfaces.first {
             path.usesInterfaceType($0.type) &&
             ($0.type == .wifi || $0.type == .wiredEthernet || $0.type == .cellular)
         }
-        let interfaceName = interface?.name
-        let gatewayIP = GatewayProbe.defaultGatewayIP()
+        let interfaceName = route.interfaceName ?? interface?.name
+        let gatewayIP = route.gatewayIP
         let gatewayMAC = gatewayIP.flatMap(GatewayProbe.macAddress(forGateway:))
 
         let id: String
@@ -172,14 +211,16 @@ public final class NetworkIdentityMonitor {
             id = "unknown"
         }
 
-        let isWiFi = interface?.type == .wifi || path.usesInterfaceType(.wifi)
-        let ssid = isWiFi ? interfaceName.flatMap(wifiNames.name(onInterface:)) : nil
+        let isWiFi = interface.map { $0.type == .wifi } ?? path.usesInterfaceType(.wifi)
+        let isWired = interface.map { $0.type == .wiredEthernet } ?? path.usesInterfaceType(.wiredEthernet)
+        let isCellular = interface.map { $0.type == .cellular } ?? path.usesInterfaceType(.cellular)
+        let ssid = isWiFi ? interfaceName.flatMap { wifiNames.name(onInterface: $0) } : nil
         let baseName: String
         if isWiFi {
             baseName = "Wi-Fi"
-        } else if interface?.type == .wiredEthernet || path.usesInterfaceType(.wiredEthernet) {
+        } else if isWired {
             baseName = "有线网络"
-        } else if interface?.type == .cellular || path.usesInterfaceType(.cellular) {
+        } else if isCellular {
             baseName = "个人热点"
         } else {
             baseName = "网络"
@@ -210,7 +251,12 @@ public final class NetworkIdentityMonitor {
 
 /// Resolves the default router without sending network information to a service.
 private enum GatewayProbe {
-    static func defaultGatewayIP() -> String? {
+    struct DefaultRoute {
+        let gatewayIP: String?
+        let interfaceName: String?
+    }
+
+    static func defaultRoute() -> DefaultRoute {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/sbin/route")
         process.arguments = ["-n", "get", "default"]
@@ -223,22 +269,36 @@ private enum GatewayProbe {
             let data = output.fileHandleForReading.readDataToEndOfFile()
             process.waitUntilExit()
             guard process.terminationStatus == 0,
-                  let text = String(data: data, encoding: .utf8) else { return nil }
+                  let text = String(data: data, encoding: .utf8) else {
+                return DefaultRoute(gatewayIP: nil, interfaceName: nil)
+            }
 
+            var gatewayIP: String?
+            var interfaceName: String?
             for line in text.split(separator: "\n") {
                 let parts = line.split(separator: ":", maxSplits: 1)
-                guard parts.count == 2,
-                      parts[0].trimmingCharacters(in: .whitespaces) == "gateway" else { continue }
+                guard parts.count == 2 else { continue }
+                let key = parts[0].trimmingCharacters(in: .whitespaces)
                 let value = parts[1].trimmingCharacters(in: .whitespacesAndNewlines)
-                return value.isEmpty ? nil : value
+                if key == "gateway", !value.isEmpty { gatewayIP = value }
+                if key == "interface", !value.isEmpty { interfaceName = value }
             }
+            return DefaultRoute(gatewayIP: gatewayIP, interfaceName: interfaceName)
         } catch {
-            return nil
+            return DefaultRoute(gatewayIP: nil, interfaceName: nil)
+        }
+    }
+
+    static func macAddress(forGateway gateway: String) -> String? {
+        // configd can take a moment to resolve the router after Wi-Fi associates.
+        for attempt in 0..<5 {
+            if let address = configdMACAddress(forGateway: gateway) { return address }
+            if attempt < 4 { Thread.sleep(forTimeInterval: 0.2) }
         }
         return nil
     }
 
-    static func macAddress(forGateway gateway: String) -> String? {
+    private static func configdMACAddress(forGateway gateway: String) -> String? {
         guard let store = SCDynamicStoreCreate(nil, "NetworkMonitor" as CFString, nil, nil),
               let states = SCDynamicStoreCopyMultiple(
                 store, nil, ["State:/Network/Service/[^/]+/IPv4"] as CFArray
