@@ -55,15 +55,17 @@ public struct NettopParser {
     }
 
     private mutating func closeSample() -> [NettopRow]? {
-        guard !pending.isEmpty else { return nil }
-        defer { pending = [] }
-
         // With -d, nettop's first non-empty sample is the baseline, not a delta.
-        guard discardedInitialSample else {
+        if !discardedInitialSample {
+            guard !pending.isEmpty else { return nil }
             discardedInitialSample = true
+            pending = []
             return nil
         }
-        return pending
+
+        let sample = pending
+        pending = []
+        return sample
     }
 
     public static func isHeader(_ line: String) -> Bool {
@@ -75,7 +77,9 @@ public struct NettopParser {
     public static func parseRow(_ line: String) -> NettopRow? {
         guard !line.isEmpty else { return nil }
         var fields = line.components(separatedBy: ",")
-        while fields.last?.isEmpty == true { fields.removeLast() }
+        // nettop appends one CSV delimiter. Keep any additional empty numeric
+        // fields: idle processes report blank counters rather than literal zeros.
+        if fields.last?.isEmpty == true { fields.removeLast() }
         guard fields.count >= 4 else { return nil }
 
         let bytesOut = Int64(fields.removeLast().trimmingCharacters(in: .whitespaces)) ?? 0
